@@ -1,4 +1,4 @@
-/* USER CODE BEGIN Header */
+* USER CODE BEGIN Header */
 //*******************************************************************************//
 // Universidad del Valle de Guatemala
 // Laboratorio 4 - GPIOs con STM32
@@ -40,17 +40,14 @@
 /* USER CODE BEGIN PD */
 
 //*********************************************************************//
-// DEFINICIONES GENERALES
+// DEFINICION DE LOS MODOS
 //*********************************************************************//
 
-// Modos de funcionamiento
-#define MODO_CONTADOR 0
-#define MODO_RGB      1
+// Modo para controlar el contador de decadas
+#define MODO_DECADAS 0
 
-// El RGB es de anodo comun
-// RESET enciende el color y SET lo apaga
-#define RGB_ENCENDIDO GPIO_PIN_RESET
-#define RGB_APAGADO   GPIO_PIN_SET
+// Modo para controlar los colores del RGB
+#define MODO_RGB 1
 
 /* USER CODE END PD */
 
@@ -66,14 +63,19 @@
 // VARIABLES GLOBALES
 //*********************************************************************//
 
-// Guarda el valor del contador de decadas de 0 a 9
-int contadorDecadas = 0;
+// Contador de estados entre 0 y 4
+int contador = 0;
 
-// Guarda el valor del contador RGB de 0 a 6
+// Banderas para guardar la pulsacion de los botones
+int salidasube = 0;
+int salidabaja = 0;
+int cambioModo = 0;
+
+// Variable para elegir entre decadas y RGB
+int modo = MODO_DECADAS;
+
+// Contador para seleccionar los colores de 0 a 6
 int contadorRGB = 0;
-
-// Iniciar trabajando con el contador de decadas
-int modo = MODO_CONTADOR;
 
 /* USER CODE END PV */
 
@@ -82,28 +84,17 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 /* USER CODE BEGIN PFP */
 
-// Funcion para leer un boton y eliminar el rebote
-uint8_t botonPresionado(GPIO_TypeDef *puerto, uint16_t pin);
+// Funcion para mostrar el contador en los cuatro LEDs
+void mostrarDecadas(void);
 
-// Funcion para revisar los tres botones
-void leerBotones(void);
-
-// Funcion para mostrar el numero en los cuatro LEDs
-void mostrarContadorDecadas(void);
-
-// Funcion para escribir una combinacion en el LED RGB
-void escribirRGB(GPIO_PinState rojo,
-                 GPIO_PinState verde,
-                 GPIO_PinState azul);
+// Funcion para apagar los cuatro LEDs del contador
+void apagarDecadas(void);
 
 // Funcion para mostrar el color seleccionado
-void mostrarColorRGB(void);
+void mostrarColor(void);
 
-// Funcion para encender o apagar el indicador de modo
-void actualizarIndicador(void);
-
-// Funcion para actualizar todas las salidas
-void actualizarSalidas(void);
+// Funcion para apagar el LED RGB
+void apagarRGB(void);
 
 /* USER CODE END PFP */
 
@@ -143,8 +134,10 @@ int main(void)
 
   /* USER CODE BEGIN 2 */
 
-  // Mostrar los valores iniciales
-  actualizarSalidas();
+  // Iniciar con todas las salidas apagadas
+  mostrarDecadas();
+  apagarRGB();
+  HAL_GPIO_WritePin(GPIOA, modoled_Pin, 0);
 
   /* USER CODE END 2 */
 
@@ -156,8 +149,156 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 
-    // Revisar continuamente los botones
-    leerBotones();
+    //-----------------------------------------------------------------//
+    // Leer el estado actual de los tres botones
+    //-----------------------------------------------------------------//
+
+    int estado1 = HAL_GPIO_ReadPin(GPIOA, B1_Pin);
+    int estado2 = HAL_GPIO_ReadPin(GPIOA, B2_Pin);
+    int estado3 = HAL_GPIO_ReadPin(GPIOA, B3_Pin);
+
+    //-----------------------------------------------------------------//
+    // B3: cambiar el modo cuando se suelta el boton
+    //-----------------------------------------------------------------//
+
+    if (estado3 == 1)
+    {
+      cambioModo = 1;
+    }
+
+    if ((cambioModo == 1) && (estado3 == 0))
+    {
+      HAL_Delay(250);
+
+      // Alternar solamente entre los modos 0 y 1
+      modo++;
+
+      if (modo > MODO_RGB)
+      {
+        modo = MODO_DECADAS;
+      }
+
+      cambioModo = 0;
+    }
+
+    //-----------------------------------------------------------------//
+    // MODO 0: CONTADOR DE DECADAS
+    //-----------------------------------------------------------------//
+
+    if (modo == MODO_DECADAS)
+    {
+      // Apagar el indicador y el LED RGB
+      HAL_GPIO_WritePin(GPIOA, modoled_Pin, 0);
+      apagarRGB();
+
+      //---------------------------------------------------------------//
+      // B1: aumentar el contador al soltar el boton
+      //---------------------------------------------------------------//
+
+      if (estado1 == 1)
+      {
+        salidasube = 1;
+      }
+
+      if ((salidasube == 1) && (estado1 == 0))
+      {
+        HAL_Delay(250);
+        contador++;
+
+        // El contador es circular: despues de 4 regresa a 0
+        if (contador > 4)
+        {
+          contador = 0;
+        }
+
+        salidasube = 0;
+      }
+
+      //---------------------------------------------------------------//
+      // B2: disminuir el contador al soltar el boton
+      //---------------------------------------------------------------//
+
+      if (estado2 == 1)
+      {
+        salidabaja = 1;
+      }
+
+      if ((salidabaja == 1) && (estado2 == 0))
+      {
+        HAL_Delay(250);
+        contador--;
+
+        // Antes de 0, regresar a 4
+        if (contador < 0)
+        {
+          contador = 4;
+        }
+
+        salidabaja = 0;
+      }
+
+      // Mostrar el numero actual en los cuatro LEDs
+      mostrarDecadas();
+    }
+
+    //-----------------------------------------------------------------//
+    // MODO 1: CONTROL DEL LED RGB
+    //-----------------------------------------------------------------//
+
+    if (modo == MODO_RGB)
+    {
+      // Encender el indicador y apagar los LEDs del contador
+      HAL_GPIO_WritePin(GPIOA, modoled_Pin, 1);
+      apagarDecadas();
+
+      //---------------------------------------------------------------//
+      // B1: aumentar el contador RGB
+      //---------------------------------------------------------------//
+
+      if (estado1 == 1)
+      {
+        salidasube = 1;
+      }
+
+      if ((salidasube == 1) && (estado1 == 0))
+      {
+        HAL_Delay(250);
+
+        // Detener el contador en su valor maximo
+        if (contadorRGB < 6)
+        {
+          contadorRGB++;
+        }
+
+        salidasube = 0;
+      }
+
+      //---------------------------------------------------------------//
+      // B2: disminuir el contador RGB
+      //---------------------------------------------------------------//
+
+      if (estado2 == 1)
+      {
+        salidabaja = 1;
+      }
+
+      if ((salidabaja == 1) && (estado2 == 0))
+      {
+        HAL_Delay(250);
+
+        // Detener el contador en su valor minimo
+        if (contadorRGB > 0)
+        {
+          contadorRGB--;
+        }
+
+        salidabaja = 0;
+      }
+
+      // Mostrar el color correspondiente
+      mostrarColor();
+    }
+
   }
   /* USER CODE END 3 */
 }
@@ -281,234 +422,120 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 
 //*********************************************************************//
-// FUNCION PARA LEER UN BOTON CON ANTIRREBOTE
+// MOSTRAR EL CONTADOR DE 0 A 4 EN LOS LEDS
 //*********************************************************************//
 
-uint8_t botonPresionado(GPIO_TypeDef *puerto, uint16_t pin)
+void mostrarDecadas(void)
 {
-  // Los botones tienen resistencias pull-down.
-  // Cuando se presiona un boton, el pin recibe un estado SET.
-  if (HAL_GPIO_ReadPin(puerto, pin) == GPIO_PIN_SET)
-  {
-    // Esperar un poco para eliminar el rebote mecanico
-    HAL_Delay(50);
-
-    // Confirmar que el boton continua presionado
-    if (HAL_GPIO_ReadPin(puerto, pin) == GPIO_PIN_SET)
-    {
-      // Esperar hasta que la persona suelte el boton
-      while (HAL_GPIO_ReadPin(puerto, pin) == GPIO_PIN_SET)
-      {
-      }
-
-      // Pequenio retardo al soltar el boton
-      HAL_Delay(50);
-
-      return 1;
-    }
-  }
-
-  // No se detecto una pulsacion
-  return 0;
-}
-
-//*********************************************************************//
-// FUNCION PARA LEER LOS TRES BOTONES
-//*********************************************************************//
-
-void leerBotones(void)
-{
-  //-------------------------------------------------------------------//
-  // B3: cambiar el modo de funcionamiento
-  //-------------------------------------------------------------------//
-
-  if (botonPresionado(B3_GPIO_Port, B3_Pin) == 1)
-  {
-    if (modo == MODO_CONTADOR)
-    {
-      modo = MODO_RGB;
-    }
-    else
-    {
-      modo = MODO_CONTADOR;
-    }
-
-    actualizarIndicador();
-  }
-
-  //-------------------------------------------------------------------//
-  // B1: aumentar el contador del modo activo
-  //-------------------------------------------------------------------//
-
-  if (botonPresionado(B1_GPIO_Port, B1_Pin) == 1)
-  {
-    if (modo == MODO_CONTADOR)
-    {
-      contadorDecadas++;
-
-      // El contador de decadas es circular
-      if (contadorDecadas > 9)
-      {
-        contadorDecadas = 0;
-      }
-    }
-    else
-    {
-      // El contador RGB se detiene en 6
-      if (contadorRGB < 6)
-      {
-        contadorRGB++;
-      }
-    }
-
-    actualizarSalidas();
-  }
-
-  //-------------------------------------------------------------------//
-  // B2: disminuir el contador del modo activo
-  //-------------------------------------------------------------------//
-
-  if (botonPresionado(B2_GPIO_Port, B2_Pin) == 1)
-  {
-    if (modo == MODO_CONTADOR)
-    {
-      contadorDecadas--;
-
-      // Al disminuir desde 0, regresar a 9
-      if (contadorDecadas < 0)
-      {
-        contadorDecadas = 9;
-      }
-    }
-    else
-    {
-      // El contador RGB se detiene en 0
-      if (contadorRGB > 0)
-      {
-        contadorRGB--;
-      }
-    }
-
-    actualizarSalidas();
-  }
-}
-
-//*********************************************************************//
-// PARTE 1: MOSTRAR EL CONTADOR DE DECADAS
-//*********************************************************************//
-
-void mostrarContadorDecadas(void)
-{
-  // led1 representa el bit con valor 1
-  HAL_GPIO_WritePin(led1_GPIO_Port,
-                    led1_Pin,
-                    (contadorDecadas & 0x01) ? GPIO_PIN_SET : GPIO_PIN_RESET);
-
-  // led2 representa el bit con valor 2
-  HAL_GPIO_WritePin(led2_GPIO_Port,
-                    led2_Pin,
-                    (contadorDecadas & 0x02) ? GPIO_PIN_SET : GPIO_PIN_RESET);
-
-  // led3 representa el bit con valor 4
-  HAL_GPIO_WritePin(led3_GPIO_Port,
-                    led3_Pin,
-                    (contadorDecadas & 0x04) ? GPIO_PIN_SET : GPIO_PIN_RESET);
-
-  // led4 representa el bit con valor 8
-  HAL_GPIO_WritePin(led4_GPIO_Port,
-                    led4_Pin,
-                    (contadorDecadas & 0x08) ? GPIO_PIN_SET : GPIO_PIN_RESET);
-}
-
-//*********************************************************************//
-// FUNCION PARA ESCRIBIR EN EL LED RGB
-//*********************************************************************//
-
-void escribirRGB(GPIO_PinState rojo,
-                 GPIO_PinState verde,
-                 GPIO_PinState azul)
-{
-  HAL_GPIO_WritePin(Rojo_GPIO_Port, Rojo_Pin, rojo);
-  HAL_GPIO_WritePin(Verde_GPIO_Port, Verde_Pin, verde);
-  HAL_GPIO_WritePin(blue_GPIO_Port, blue_Pin, azul);
-}
-
-//*********************************************************************//
-// PARTE 2: SELECCIONAR EL COLOR DEL LED RGB
-//*********************************************************************//
-
-void mostrarColorRGB(void)
-{
-  switch (contadorRGB)
+  // Cada valor enciende solamente el LED correspondiente
+  switch (contador)
   {
     case 0:
-      // Todos los colores apagados
-      escribirRGB(RGB_APAGADO, RGB_APAGADO, RGB_APAGADO);
+      apagarDecadas();
       break;
 
     case 1:
-      // Rojo
-      escribirRGB(RGB_ENCENDIDO, RGB_APAGADO, RGB_APAGADO);
+      HAL_GPIO_WritePin(GPIOA, led1_Pin, 1);
+      HAL_GPIO_WritePin(GPIOB, led2_Pin, 0);
+      HAL_GPIO_WritePin(GPIOB, led3_Pin, 0);
+      HAL_GPIO_WritePin(GPIOB, led4_Pin, 0);
       break;
 
     case 2:
-      // Rojo y azul forman magenta
-      escribirRGB(RGB_ENCENDIDO, RGB_APAGADO, RGB_ENCENDIDO);
+      HAL_GPIO_WritePin(GPIOA, led1_Pin, 0);
+      HAL_GPIO_WritePin(GPIOB, led2_Pin, 1);
+      HAL_GPIO_WritePin(GPIOB, led3_Pin, 0);
+      HAL_GPIO_WritePin(GPIOB, led4_Pin, 0);
       break;
 
     case 3:
-      // Azul
-      escribirRGB(RGB_APAGADO, RGB_APAGADO, RGB_ENCENDIDO);
+      HAL_GPIO_WritePin(GPIOA, led1_Pin, 0);
+      HAL_GPIO_WritePin(GPIOB, led2_Pin, 0);
+      HAL_GPIO_WritePin(GPIOB, led3_Pin, 1);
+      HAL_GPIO_WritePin(GPIOB, led4_Pin, 0);
       break;
 
     case 4:
-      // Verde y azul forman cian
-      escribirRGB(RGB_APAGADO, RGB_ENCENDIDO, RGB_ENCENDIDO);
-      break;
-
-    case 5:
-      // Verde
-      escribirRGB(RGB_APAGADO, RGB_ENCENDIDO, RGB_APAGADO);
-      break;
-
-    case 6:
-      // Rojo y verde forman amarillo
-      escribirRGB(RGB_ENCENDIDO, RGB_ENCENDIDO, RGB_APAGADO);
-      break;
-
-    default:
-      escribirRGB(RGB_APAGADO, RGB_APAGADO, RGB_APAGADO);
+      HAL_GPIO_WritePin(GPIOA, led1_Pin, 0);
+      HAL_GPIO_WritePin(GPIOB, led2_Pin, 0);
+      HAL_GPIO_WritePin(GPIOB, led3_Pin, 0);
+      HAL_GPIO_WritePin(GPIOB, led4_Pin, 1);
       break;
   }
 }
 
 //*********************************************************************//
-// PARTE 4: LED INDICADOR DEL MODO
+// APAGAR LOS CUATRO LEDS DEL CONTADOR
 //*********************************************************************//
 
-void actualizarIndicador(void)
+void apagarDecadas(void)
 {
-  if (modo == MODO_RGB)
-  {
-    // Encender el indicador en el modo RGB
-    HAL_GPIO_WritePin(modoled_GPIO_Port, modoled_Pin, GPIO_PIN_SET);
-  }
-  else
-  {
-    // Apagar el indicador en el modo contador
-    HAL_GPIO_WritePin(modoled_GPIO_Port, modoled_Pin, GPIO_PIN_RESET);
-  }
+  HAL_GPIO_WritePin(GPIOA, led1_Pin, 0);
+  HAL_GPIO_WritePin(GPIOB, led2_Pin, 0);
+  HAL_GPIO_WritePin(GPIOB, led3_Pin, 0);
+  HAL_GPIO_WritePin(GPIOB, led4_Pin, 0);
 }
 
 //*********************************************************************//
-// FUNCION PARA ACTUALIZAR TODAS LAS SALIDAS
+// APAGAR LOS TRES COLORES DEL LED RGB
 //*********************************************************************//
 
-void actualizarSalidas(void)
+void apagarRGB(void)
 {
-  mostrarContadorDecadas();
-  mostrarColorRGB();
-  actualizarIndicador();
+  // En este montaje se utiliza RESET para apagar cada color
+  HAL_GPIO_WritePin(GPIOB, Rojo_Pin, 1);
+  HAL_GPIO_WritePin(GPIOC, Verde_Pin, 1);
+  HAL_GPIO_WritePin(GPIOC, blue_Pin, 1);
+}
+
+//*********************************************************************//
+// MOSTRAR LOS COLORES DE ACUERDO CON EL CONTADOR RGB
+//*********************************************************************//
+
+void mostrarColor(void)
+{
+  switch (contadorRGB)
+  {
+    case 0: // Apagado
+      apagarRGB();
+      break;
+
+    case 1: // Rojo
+      HAL_GPIO_WritePin(GPIOB, Rojo_Pin, 1);
+      HAL_GPIO_WritePin(GPIOC, Verde_Pin, 0);
+      HAL_GPIO_WritePin(GPIOC, blue_Pin, 0);
+      break;
+
+    case 2: // Magenta
+      HAL_GPIO_WritePin(GPIOB, Rojo_Pin, 1);
+      HAL_GPIO_WritePin(GPIOC, Verde_Pin, 0);
+      HAL_GPIO_WritePin(GPIOC, blue_Pin, 1);
+      break;
+
+    case 3: // Azul
+      HAL_GPIO_WritePin(GPIOB, Rojo_Pin, 0);
+      HAL_GPIO_WritePin(GPIOC, Verde_Pin, 0);
+      HAL_GPIO_WritePin(GPIOC, blue_Pin, 1);
+      break;
+
+    case 4: // Cian
+      HAL_GPIO_WritePin(GPIOB, Rojo_Pin, 0);
+      HAL_GPIO_WritePin(GPIOC, Verde_Pin, 1);
+      HAL_GPIO_WritePin(GPIOC, blue_Pin, 1);
+      break;
+
+    case 5: // Verde
+      HAL_GPIO_WritePin(GPIOB, Rojo_Pin, 0);
+      HAL_GPIO_WritePin(GPIOC, Verde_Pin, 1);
+      HAL_GPIO_WritePin(GPIOC, blue_Pin, 0);
+      break;
+
+    case 6: // Amarillo
+      HAL_GPIO_WritePin(GPIOB, Rojo_Pin, 1);
+      HAL_GPIO_WritePin(GPIOC, Verde_Pin, 1);
+      HAL_GPIO_WritePin(GPIOC, blue_Pin, 0);
+      break;
+  }
 }
 
 /* USER CODE END 4 */
@@ -544,3 +571,4 @@ void assert_failed(uint8_t *file, uint32_t line)
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
+
